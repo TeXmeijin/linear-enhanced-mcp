@@ -22,7 +22,7 @@ Retrieves a list of labels associated with a team.
 
 ```typescript
 {
-  teamId: string;      // Required: Team ID
+  teamId: string; // Required: Team ID
 }
 ```
 
@@ -58,7 +58,7 @@ Displays a list of workflow states for a specific team.
 
 ```typescript
 {
-  teamId: string;      // Required: Team ID
+  teamId: string; // Required: Team ID
 }
 ```
 
@@ -141,7 +141,17 @@ Gets detailed information about a specific issue.
 
 ```typescript
 {
-  issueId: string;     // Required: Issue ID
+  issueId: string; // Required: Issue ID
+}
+```
+
+#### get_project
+
+Gets detailed information about a specific project, including teams, issues, and members.
+
+```typescript
+{
+  projectId: string; // Required: Project ID
 }
 ```
 
