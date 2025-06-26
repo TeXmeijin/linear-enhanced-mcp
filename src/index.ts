@@ -18,6 +18,7 @@ import {
   ListToolsRequestSchema,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
+import { url } from "inspector";
 
 const API_KEY = process.env.LINEAR_API_KEY || process.env.LINEARAPIKEY;
 const TEAM_NAME = process.env.LINEAR_TEAM_NAME || process.env.LINEARTEAMNAME;
@@ -583,7 +584,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         // assigneeIdがnullの場合はそのまま（担当者なし）
 
-        const issue = await linearClient.createIssue({
+        const issuePayload = await linearClient.createIssue({
           title: args.title,
           description: args.description,
           teamId: args.teamId,
@@ -594,6 +595,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           projectId: args.projectId,
           stateId: args.stateId,
         });
+
+        const issue = await issuePayload.issue;
 
         return {
           content: [
@@ -672,7 +675,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [
             {
               type: "text",
-              text: JSON.stringify(updatedIssue, null, 2),
+              text: JSON.stringify({
+                ...updatedIssue,
+                issueUrl: issue.url,
+              }, null, 2),
             },
           ],
         };
