@@ -629,6 +629,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const assignee = await issue.assignee;
             return {
               id: issue.id,
+              identifier: issue.identifier,
               title: issue.title,
               status: state ? await state.name : "Unknown",
               assignee: assignee ? assignee.name : "Unassigned",
