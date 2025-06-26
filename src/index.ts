@@ -58,15 +58,15 @@ const baseTools = [
   "create_issue",
   "list_issues",
   "update_issue",
-  "list_teams",
+  "list_teams_and_states",
   "list_projects",
   "search_issues",
   "get_issue",
   "list_labels",
   "create_label",
   "update_label",
-  "list_states",
   "list_team_members",
+  "list_project_states",
   "get_project",
   "create_project",
   "update_project",
@@ -225,12 +225,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: "list_teams",
-        description: "List all teams in the workspace",
-        inputSchema: {
-          type: "object",
-          properties: {},
-        },
+        name: "list_teams_and_states",
+        description: "List all teams with their workflow states",
+        inputSchema: { type: "object", properties: {} },
       },
       {
         name: "list_projects",
@@ -266,6 +263,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             first: {
               type: "number",
               description: "Number of results to return (default: 50)",
+            },
+            teamId: {
+              type: "string",
+              description: "Filter by team ID (optional)",
             },
           },
           required: ["query"],
@@ -352,20 +353,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: "list_states",
-        description: "特定のチームにおけるワークフローステータスのリストを表示",
-        inputSchema: {
-          type: "object",
-          properties: {
-            teamId: {
-              type: "string",
-              description: "チームID",
-            },
-          },
-          required: ["teamId"],
-        },
-      },
-      {
         name: "list_team_members",
         description: "チームに所属するメンバー一覧を取得",
         inputSchema: {
@@ -378,6 +365,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["teamId"],
         },
+      },
+      {
+        name: "list_project_states",
+        description: "List all distinct project states",
+        inputSchema: { type: "object", properties: {} },
       },
       {
         name: "get_project",
@@ -515,6 +507,7 @@ type ListProjectsArgs = {
 type SearchIssuesArgs = {
   query: string;
   first?: number;
+  teamId?: string;
 };
 
 type GetIssueArgs = {
@@ -685,23 +678,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case "list_teams": {
-        const query = await linearClient.teams();
-        const teams = await Promise.all(
-          (query as any).nodes.map(async (team: any) => ({
-            id: team.id,
-            name: team.name,
-            key: team.key,
-            description: team.description,
-          }))
+      case "list_teams_and_states": {
+        const teamsQuery = await linearClient.teams();
+        const teamsWithStates = await Promise.all(
+          (teamsQuery as any).nodes.map(async (team: any) => {
+            const statesQuery = await team.states();
+            const states = statesQuery.nodes.map((state: any) => ({
+              id: state.id,
+              name: state.name,
+              color: state.color,
+              type: state.type,
+              position: state.position,
+              description: state.description,
+              teamId: team.id,
+            }));
+            return {
+              id: team.id,
+              name: team.name,
+              key: team.key,
+              description: team.description,
+              states,
+            };
+          })
         );
-
         return {
           content: [
-            {
-              type: "text",
-              text: JSON.stringify(teams, null, 2),
-            },
+            { type: "text", text: JSON.stringify(teamsWithStates, null, 2) },
           ],
         };
       }
@@ -748,8 +750,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           first: args?.first ?? 50,
         });
 
+        let nodes = searchResults.nodes;
+        if (args.teamId) {
+          const filtered: typeof nodes = [];
+          for (const result of nodes) {
+            const team = await result.team;
+            if (team && team.id === args.teamId) {
+              filtered.push(result);
+            }
+          }
+          nodes = filtered;
+        }
+
         const formattedResults = await Promise.all(
-          searchResults.nodes.map(async (result) => {
+          nodes.map(async (result) => {
             const state = await result.state;
             const assignee = await result.assignee;
             return {
@@ -1069,37 +1083,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case "list_states": {
-        const args = request.params.arguments as unknown as ListStatesArgs;
-
-        let states = [];
-
-        const team = await linearClient.team(args.teamId);
-        if (!team) {
-          throw new Error(`Team ${args.teamId} not found`);
-        }
-
-        const workflowStates = await team.states();
-        states = workflowStates.nodes.map((state) => ({
-          id: state.id,
-          name: state.name,
-          color: state.color,
-          type: state.type,
-          position: state.position,
-          description: state.description,
-          teamId: team.id,
-        }));
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(states, null, 2),
-            },
-          ],
-        };
-      }
-
       case "list_team_members": {
         const args = request.params.arguments as unknown as ListTeamMembersArgs;
         if (!args?.teamId) {
@@ -1143,6 +1126,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: "text",
               text: JSON.stringify(teamMembers, null, 2),
+            },
+          ],
+        };
+      }
+
+      case "list_project_states": {
+        const states = await linearClient.projectStatuses();
+        const formattedStates = states.nodes.map((state) => ({
+          id: state.id,
+          name: state.name,
+          color: state.color,
+          type: state.type,
+        }));
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(formattedStates, null, 2),
             },
           ],
         };
